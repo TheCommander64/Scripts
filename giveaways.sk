@@ -1,7 +1,13 @@
+options:
+	mongo: YOUR MONGO CONNECTION STRING HERE
+	database: NAME OF MONGO DATABASE
+	collection: NAME OF MONGO COLLECTION
+	bot: NAME OF YOUR BOT
+	guild: ID OF YOUR GUILD # This is used to update the slash commands immediately in your server
 on load:
-	set {mongo::client} to a new mongosk client with connection string "mongodb://system:9V95LrvShi3W@185.239.236.56:19980"
-	set {mongo::database::discord} to mongo database named "Discord" of {mongo::client} 
-	set {mongo::collection::Giveaways} to mongo collection named "Giveaways" of {mongo::database::discord}
+	set {mongo::client} to a new mongosk client with connection string "{@mongo}"
+	set {mongo::database::discord} to mongo database named "{@database}" of {mongo::client} 
+	set {mongo::collection::Giveaways} to mongo collection named "{@collection}" of {mongo::database::discord}
 
 	set {_document2} to first mongo document with mongosk filter where field "id" is "ACTIVE" of collection {mongo::collection::Giveaways}
 	if {_document2} is not set:
@@ -23,8 +29,8 @@ on load:
 	enable {_cmd2} for manage server
 	disable {_cmd3}
 	enable {_cnd3} for manage server
-	update {_update::*} locally in guild with id "758752120438128650"
-	update {_update::*} globally in bot with name "Survivor"
+	update {_update::*} locally in guild with id "{@guild}"
+	update {_update::*} globally in bot with name "{@bot}"
 on slash command:
 	event-string is "creategiveaway"
 	set {_item} to argument "item" as string
@@ -41,7 +47,7 @@ on slash command:
 			set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: %mention tag of event-user%%nl%Entries: **0**%nl%Winners: %{_winners}%"
 			set footer of embed to ""
 			set timestamp of embed to now
-			set author of embed to "SurvivorBot"
+			set author of embed to "{@bot}"
 			make new component row and store it in {_row}:
 				add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
 				add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
@@ -96,7 +102,7 @@ on button click:
 					set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%size of {_entries::*}%**%nl%Winners: %{_winners}%"
 					set footer of embed to ""
 					set timestamp of embed to now
-					set author of embed to "SurvivorBot"
+					set author of embed to "{@bot}"
 					make new component row and store it in {_row}:
 						add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
 						add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
@@ -139,7 +145,7 @@ on button click:
 					set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%{_size}%**%nl%Winners: %{_winners}%"
 					set footer of embed to ""
 					set timestamp of embed to now
-					set author of embed to "SurvivorBot"
+					set author of embed to "{@bot}"
 					make new component row and store it in {_row}:
 						add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
 						add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
@@ -186,7 +192,7 @@ function endGiveaway(i: integer):
 			set description of embed to "Ended: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%{_size}%**%nl%Winners: %{_win::*}%"
 			set footer of embed to ""
 			set timestamp of embed to now
-			set author of embed to "SurvivorBot"
+			set author of embed to "{@bot}"
 			add last embed to the embeds of the message
 	edit {_message} to show {_msg}
 
