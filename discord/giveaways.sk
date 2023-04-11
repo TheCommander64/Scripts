@@ -1,0 +1,205 @@
+options:
+	mongo: YOUR MONGO CONNECTION STRING HERE
+	database: NAME OF MONGO DATABASE
+	collection: NAME OF MONGO COLLECTION
+	bot: NAME OF YOUR BOT
+	guild: ID OF YOUR GUILD # This is used to update the slash commands immediately in your server
+on load:
+	set {mongo::client} to a new mongosk client with connection string "{@mongo}"
+	set {mongo::database::discord} to mongo database named "{@database}" of {mongo::client} 
+	set {mongo::collection::Giveaways} to mongo collection named "{@collection}" of {mongo::database::discord}
+
+	set {_document2} to first mongo document with mongosk filter where field "id" is "ACTIVE" of collection {mongo::collection::Giveaways}
+	if {_document2} is not set:
+		set {_new} to new mongo document
+		set mongo value "id" of {_new} to "ACTIVE"
+		insert mongo document {_new} in collection {mongo::collection::Giveaways}
+on load:
+	set {_cmd2} to slash command named "creategiveaway" with description "Create A New Giveaway!"
+	add new required string option named "item" with description "What are you giving away?" to options of {_cmd2}
+	add new required integer option named "winners" with description "How many winners should their be?" to options of {_cmd2}
+	add new required integer option named "length" with description "How long should the giveaway run for? (Input in hours)" to options of {_cmd2}
+	add new required string option named "channel" with description "What channel should this giveaway be posted in? (Enter Channel ID)" to options of {_cmd2}
+	add {_cmd2} to {_update::*}
+	
+	set {_cmd3} to slash command named "reroll" with description "Reroll the winners of a giveaway!"
+	add new required string option named "id" with description "The ID of the giveaway you wish to reroll" to options of {_cmd3}
+	add {_cmd3} to {_update::*}
+	disable {_cmd2}
+	enable {_cmd2} for manage server
+	disable {_cmd3}
+	enable {_cnd3} for manage server
+	update {_update::*} locally in guild with id "{@guild}"
+	update {_update::*} globally in bot with name "{@bot}"
+on slash command:
+	event-string is "creategiveaway"
+	set {_item} to argument "item" as string
+	set {_length} to argument "length" as integer
+	set {_winners} to argument "winners" as integer
+	set {_channel} to argument "channel" as string
+	set {_time} to "%{_length}% hours" parsed as a timespan
+	set {_time2} to {_time} from now
+	set {_unix} to round(unix timestamp of {_time2})
+	make new message and store it in {_msg}:
+		make new embed:
+			set embed colour of embed to green
+			set title of embed to "**%{_item}%**"
+			set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: %mention tag of event-user%%nl%Entries: **0**%nl%Winners: %{_winners}%"
+			set footer of embed to ""
+			set timestamp of embed to now
+			set author of embed to "{@bot}"
+			make new component row and store it in {_row}:
+				add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
+				add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
+			add {_row} to rows of the message
+			add last embed to the embeds of the message	
+	post {_msg} in channel with id "%{_channel}%" and store it in {_msg2}
+	reply with hidden "Giveaway has been created in %mention tag of channel with id {_channel}%"
+	set {_id} to discord id of {_msg2}
+	set {_new} to new mongo document
+	set mongo value "id" of {_new} to "%{_id}%"
+	set mongo value "item" of {_new} to "%{_item}%"
+	set mongo value "unix" of {_new} to "%{_unix}%"
+	set mongo value "winners" of {_new} to "%{_winners}%"
+	set mongo value "creator" of {_new} to "%discord id of event-user%"
+	set mongo value "channel" of {_new} to "%{_channel}%"
+	insert mongo document {_new} in collection {mongo::collection::Giveaways}
+	set {_document2} to first mongo document with mongosk filter where field "id" is "ACTIVE" of collection {mongo::collection::Giveaways}
+	set {_giveaways::*} to mongo list "giveaways" of {_document2}
+	add {_id} to {_giveaways::*}
+	set mongo list "giveaways" of {_document2} to {_giveaways::*}
+	update mongo document {_document2} in collection {mongo::collection::Giveaways}
+on slash command:
+	event-string is "reroll"
+	set {_id} to argument "id" as string
+	endGiveaway(({_id} parsed as integer))
+on button click:
+	set {_button} to event-string
+	{_button} is "giveaway.join"
+	set {_id} to discord id of event-message
+	set {_document} to first mongo document with mongosk filter where field "id" is "%{_id}%" of collection {mongo::collection::Giveaways}
+	if {_document} is set:	
+		set {_item} to mongo value "item" of {_document}
+		set {_length} to mongo value "length" of {_document}
+		set {_winners} to mongo value "winners" of {_document}
+		set {_entries::*} to mongo list "entries" of {_document}
+		set {_channel} to mongo value "channel" of {_document}
+		set {_creator} to mongo value "creator" of {_document}
+		set {_unix} to mongo value "unix" of {_document}
+		if {_entries::*} contains discord id of event-user:
+			make new message and store it in {_msg}:
+				set content of message to ":x: You have already joined this giveaway!"
+				add {_row} to rows of the message
+			reply with hidden {_msg}
+		else:
+			add discord id of event-user to {_entries::*}
+			set mongo list "entries" of {_document} to {_entries::*}
+			update mongo document {_document} in collection {mongo::collection::Giveaways}
+			make new message and store it in {_msg}:
+				make new embed:
+					set embed colour of embed to green
+					set title of embed to "**%{_item}%**"
+					set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%size of {_entries::*}%**%nl%Winners: %{_winners}%"
+					set footer of embed to ""
+					set timestamp of embed to now
+					set author of embed to "{@bot}"
+					make new component row and store it in {_row}:
+						add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
+						add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
+					add {_row} to rows of the message
+					add last embed to the embeds of the message
+			edit event-message to show {_msg}
+			set {message::%{_id}%} to event-message
+			reply with hidden "Successfully joined the giveaway!"
+
+	else:
+		reply with hidden ":x: Giveaway not found!"
+
+on button click:
+	set {_button} to event-string
+	{_button} is "giveaway.leave"
+	set {_id} to discord id of event-message
+	set {_document} to first mongo document with mongosk filter where field "id" is "%{_id}%" of collection {mongo::collection::Giveaways}
+	if {_document} is set:	
+		set {_item} to mongo value "item" of {_document}
+		set {_length} to mongo value "length" of {_document}
+		set {_winners} to mongo value "winners" of {_document}
+		set {_entries::*} to mongo list "entries" of {_document}
+		set {_channel} to mongo value "channel" of {_document}
+		set {_creator} to mongo value "creator" of {_document}
+		set {_unix} to mongo value "unix" of {_document}
+		if {_entries::*} does not contain discord id of event-user:
+			make new message and store it in {_msg}:
+				set content of message to ":x: You're not in this giveaway!"
+			reply with hidden {_msg}
+		else:
+			remove discord id of event-user from {_entries::*}
+			set mongo list "entries" of {_document} to {_entries::*}
+			update mongo document {_document} in collection {mongo::collection::Giveaways}
+			set {_entries::*} to mongo list "entries" of {_document}
+			set {_size} to size of {_entries::*}
+			make new message and store it in {_msg2}:
+				make new embed:
+					set embed colour of embed to green
+					set title of embed to "**%{_item}%**"
+					set description of embed to "Ends: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%{_size}%**%nl%Winners: %{_winners}%"
+					set footer of embed to ""
+					set timestamp of embed to now
+					set author of embed to "{@bot}"
+					make new component row and store it in {_row}:
+						add new primary button with id "giveaway.join" named "Join Giveaway" to components of the row builder
+						add new danger button with id "giveaway.leave" named "Leave Giveaway" to components of the row builder
+					add {_row} to rows of the message
+					add last embed to the embeds of the message
+			edit event-message to show {_msg2}
+			reply with hidden "Successfully left the giveaway!"
+
+
+
+every 3 seconds:
+	set {_document} to first mongo document with mongosk filter where field "id" is "ACTIVE" of collection {mongo::collection::Giveaways}
+	set {_giveaways::*} to mongo list "giveaways" of {_document}
+	loop {_giveaways::*}:
+		set {_id} to ("%loop-value%" parsed as integer)
+		set {_document} to first mongo document with mongosk filter where field "id" is "%{_id}%" of collection {mongo::collection::Giveaways}
+		set {_unix} to mongo value "unix" of {_document}
+		set {_date} to unix date of ({_unix} parsed as integer)
+		set {_timesince} to time since {_date}
+
+		if {_timesince} is set:
+			endGiveaway({_id})
+function endGiveaway(i: integer):
+	set {_document} to first mongo document with mongosk filter where field "id" is "%{_i}%" of collection {mongo::collection::Giveaways}
+	set {_entries::*} to mongo list "entries" of {_document}
+	set {_size} to size of {_entries::*}
+	set {_winners} to mongo value "winners" of {_document}
+	set {_channel} to mongo value "channel" of {_document}
+	set {_unix} to mongo value "unix" of {_document}
+	set {_creator} to mongo value "creator" of {_document}
+	set {_item} to mongo value "item" of {_document}
+	loop ({_winners} parsed as integer) times:
+		set {_random} to random element of {_entries::*}
+		{_random} is set
+		add "<@%{_random}%>" to {_win::*}
+		remove {_random} from {_entries::*}
+
+	retrieve message with id "%{_i}%" in channel with id "%{_channel}%" and store it in {_message}
+
+	make new message and store it in {_msg}:
+		make new embed:
+			set embed colour of embed to red
+			set title of embed to "**%{_item}%**"
+			set description of embed to "Ended: <t:%{_unix}%:R> (<t:%{_unix}%:f>)%nl%Hosted By: <@%{_creator}%>%nl%Entries: **%{_size}%**%nl%Winners: %{_win::*}%"
+			set footer of embed to ""
+			set timestamp of embed to now
+			set author of embed to "{@bot}"
+			add last embed to the embeds of the message
+	edit {_message} to show {_msg}
+
+	post "Congratulations %{_win::*}%! You won the **%{_item}%**!" to channel with id {_channel}
+	send "Giveaway %{_i}% has ended!" to console
+	set {_document2} to first mongo document with mongosk filter where field "id" is "ACTIVE" of collection {mongo::collection::Giveaways}
+	set {_giveaways::*} to mongo list "giveaways" of {_document2}
+	remove "%{_i}%" from {_giveaways::*}
+	set mongo list "giveaways" of {_document2} to {_giveaways::*}
+	update mongo document {_document2} in collection {mongo::collection::Giveaways}
