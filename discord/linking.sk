@@ -1,0 +1,57 @@
+options:
+	mongo: YOUR MONGO CONNECTION STRING HERE
+	database: NAME OF MONGO DATABASE
+	codes: NAME OF MONGO COLLECTION TO STORE Codes
+    linked: NAME OF MONGO COLLECTION TO STORE LINKED PLAYERS
+	bot: NAME OF YOUR BOT
+    prefix: YOUR PREFIX
+    linkrole: DISCORD ID OF ROLE TO GIVE UPON LINKING
+on load:
+    set {mongo::client} to a new mongosk client with connection string "{@mongo}"
+    set {mongo::database::discord} to mongo database named "{@database}" of {mongo::client} 
+    set {mongo::collection::codes} to mongo collection named "{@codes}" of {mongo::database::discord}
+    set {mongo::collection::linked} to mongo collection named "{@linked}" of {mongo::database::discord}
+discord command link [<number>]:
+    prefixes: {@prefix}
+    trigger:
+        if arg-1 is not set:
+            reply with ":x: You need to enter a valid code!"
+            stop
+        set {_document} to first mongo document with mongosk filter where field "code" is "%arg-1%" of collection {mongo::collection::codes}
+        if {_document} is set:
+            set {_document2} to first mongo document with mongosk filter where field "id" is "%discord id of event-member%" of collection {mongo::collection::linked}
+            if {_document2} is set:
+                reply with ":x: This account is already linked!"
+            else:
+                set {_uuid} to mongo value "uuid" of {_document}
+                set {_new} to new mongo document
+                set mongo value "uuid" of {_new} to {_uuid}
+                set mongo value "id" of {_new} to "%discord id of event-member%"
+                insert mongo document {_new} in collection {mongo::collection::linked}
+                remove mongo document {_document} in collection {mongo::collection::codes}
+                reply with "Success! Your account has been linked to %{_uuid} parsed as offline player%"
+                send "&aYour account has been linked to %event-user%" to {_uuid} parsed as offline player
+                add role with id "{@linkrole}" to roles of event-member
+        else:
+            reply with ":x: Invalid Code!"
+command /link:
+    cooldown: 30 seconds
+    cooldown message: Please wait before doing this again!
+    trigger:
+        set {_check} to first mongo document with mongosk filter where field "uuid" is "%uuid of player%" of collection {mongo::collection::linked}
+        if {_check} is set:
+            send "&cThis account is already linked!"
+            stop
+        set {_code} to random integer between 111111 and 999999
+        set {_check} to first mongo document with mongosk filter where field "code" is "%{_code}%" of collection {mongo::collection::codes}
+        if {_check} is set:
+            set {_code} to random integer between 111111 and 999999
+        set {_new} to new mongo document
+        set mongo value "code" of {_new} to "%{_code}%"
+        set mongo value "uuid" of {_new} to "%uuid of player%"
+        insert mongo document {_new} in collection {mongo::collection::codes}
+        send formatted "&aYour code is <tooltip:Click to copy command><suggest command:!link %{_code}%>&b%{_code}%<reset>"
+        wait 1 minute
+        set {_check} to first mongo document with mongosk filter where field "code" is "%{_code}%" of collection {mongo::collection::codes}
+        if {_check} is set:
+            remove mongo document {_check} in collection {mongo::collection::codes}
